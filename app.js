@@ -18,6 +18,7 @@
     { id: "gemini-3.8-flash",      note: "가장 새 Flash" },
     { id: "gemini-3-flash-preview", note: "프리뷰 · 한도가 더 빡빡할 수 있음" },
   ];
+  const BATCH = 10;   // 채점 때 한 번에 보내는 문장 수. 20건은 느린 모델에서 60초를 넘긴 적이 있다
   const CUSTOM = "__custom__";
   const KEY = "classifier.model";
 
@@ -165,9 +166,13 @@
     const masked = S.test.map(r => Mask.mask(r.text).masked);
     const results = [];
     let usedModel = "";
-    for (let i = 0; i < masked.length; i += 20) {
+    for (let i = 0; i < masked.length; i += BATCH) {
       btn.textContent = `AI 채점 중… ${i}/${masked.length}`;
-      const r = await askAI(masked.slice(i, i + 20));
+      let r = await askAI(masked.slice(i, i + BATCH));
+      if (!r.results && r.timeout) {          // 느린 응답은 그 묶음만 한 번 더 시도한다
+        btn.textContent = `AI 채점 중… ${i}/${masked.length} (느려서 다시 시도)`;
+        r = await askAI(masked.slice(i, i + BATCH));
+      }
       usedModel = r.model || usedModel;
       if (!r.results) {
         $("#score-msg").hidden = false;

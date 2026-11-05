@@ -111,6 +111,7 @@ class handler(BaseHTTPRequestHandler):
         key = os.environ.get("GEMINI_API_KEY", "").strip()
         if not key:
             return self._send({"results": None, "reason": "키가 없습니다 — Vercel 환경 변수 GEMINI_API_KEY"})
+        model = MODEL
         try:
             n = int(self.headers.get("Content-Length", "0"))
             req = json.loads(self.rfile.read(min(n, 60000)).decode("utf-8"))
@@ -125,6 +126,12 @@ class handler(BaseHTTPRequestHandler):
             items = call_gemini(key, build_prompt(texts, crit), model)
             return self._send({"results": clean(items, len(texts)), "model": model})
         except urllib.error.HTTPError as e:
-            return self._send({"results": None, "reason": f"AI 호출 실패 ({e.code}) — 모델 이름·한도를 확인"})
+            return self._send({"results": None, "reason": f"AI 호출 실패 ({e.code}) — 모델 이름·한도를 확인 ({model})"})
+        except (TimeoutError, urllib.error.URLError) as e:
+            # 읽는 중에 끊기면 TimeoutError, 연결 중에 끊기면 URLError(reason=TimeoutError) 로 온다.
+            if isinstance(e, TimeoutError) or isinstance(getattr(e, "reason", None), TimeoutError):
+                return self._send({"results": None, "timeout": True,
+                                   "reason": f"AI가 {TIMEOUT}초 안에 답하지 않았습니다 — 모델({model})이 느리거나 혼잡합니다"})
+            return self._send({"results": None, "reason": f"AI 호출 실패 — {type(e).__name__}"})
         except Exception as e:  # noqa: BLE001
             return self._send({"results": None, "reason": f"AI 호출 실패 — {type(e).__name__}"})
