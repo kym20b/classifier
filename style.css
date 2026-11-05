@@ -25,6 +25,13 @@ h3 { font-size: 15px; color: var(--ink); margin: 22px 0 8px; }
   font: inherit; font-weight: 700; font-size: 14px; color: var(--dim); cursor: pointer; }
 .tabs button[aria-selected="true"] { background: var(--accent-soft); color: var(--accent); }
 
+.modelbar { margin-bottom: 14px; }
+.modelbar select, .modelbar input { width: 100%; font: inherit; font-size: 14px; padding: 10px 12px;
+  border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); }
+.modelbar input { margin-top: 6px; }
+.modelbar select:focus, .modelbar input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+.modelbar p { margin: 6px 0 0; }
+
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
   padding: 16px; }
 .label { font-size: 12px; font-weight: 700; color: var(--dim); margin-bottom: 6px; display: block; }

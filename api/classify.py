@@ -17,6 +17,7 @@
 """
 import json
 import os
+import re
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler
@@ -25,6 +26,8 @@ from http.server import BaseHTTPRequestHandler
 #   2.5 계열은 예전 사용자에게만 열려 있다(2026-09). Vercel 환경 변수 GEMINI_MODEL 로 바꿀 수 있다.
 MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")
 ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+# 화면에서 모델을 바꿔 끼울 수 있다. 이름이 주소에 들어가므로 모양을 엄격히 검사한다(경로·쿼리 끼워넣기 방지).
+MODEL_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._\-]{0,63}$")
 TIMEOUT = 60
 MAX_TEXTS = 20
 MAX_LEN = 400
@@ -60,13 +63,13 @@ def build_prompt(texts, crit):
 """
 
 
-def call_gemini(key, prompt):
+def call_gemini(key, prompt, model):
     body = json.dumps({
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {"temperature": 0, "responseMimeType": "application/json"},
     }).encode("utf-8")
     req = urllib.request.Request(
-        ENDPOINT.format(model=MODEL), data=body, method="POST",
+        ENDPOINT.format(model=model), data=body, method="POST",
         headers={"Content-Type": "application/json", "x-goog-api-key": key})
     with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
         data = json.loads(r.read().decode("utf-8"))
@@ -100,6 +103,10 @@ class handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(raw)
 
+    def do_GET(self):
+        """화면이 «기본 모델»을 알아 가는 자리. 키 유무만 알리고 값은 돌려주지 않는다."""
+        self._send({"default": MODEL})
+
     def do_POST(self):
         key = os.environ.get("GEMINI_API_KEY", "").strip()
         if not key:
@@ -111,8 +118,12 @@ class handler(BaseHTTPRequestHandler):
             crit = req.get("criteria") or {}
             if not texts:
                 return self._send({"results": None, "reason": "보낸 문장이 없습니다"})
-            items = call_gemini(key, build_prompt(texts, crit))
-            return self._send({"results": clean(items, len(texts)), "model": MODEL})
+            # 화면이 고른 모델이 있으면 그것을, 비었으면 환경 변수 기본값을 쓴다.
+            model = str(req.get("model") or "").strip() or MODEL
+            if not MODEL_NAME.match(model):
+                return self._send({"results": None, "reason": "모델 이름 모양이 올바르지 않습니다 (영문·숫자·. - _ 만)"})
+            items = call_gemini(key, build_prompt(texts, crit), model)
+            return self._send({"results": clean(items, len(texts)), "model": model})
         except urllib.error.HTTPError as e:
             return self._send({"results": None, "reason": f"AI 호출 실패 ({e.code}) — 모델 이름·한도를 확인"})
         except Exception as e:  # noqa: BLE001

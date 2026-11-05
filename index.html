@@ -23,6 +23,14 @@
     <button role="tab" data-tab="rules" aria-selected="false">기준</button>
   </nav>
 
+  <!-- AI 모델 고르기 — Vercel 환경 변수를 건드리지 않고 화면에서 바꿔 끼운다 -->
+  <div class="modelbar">
+    <label for="model-sel" class="label">AI 모델</label>
+    <select id="model-sel"></select>
+    <input id="model-custom" type="text" placeholder="모델 이름 (영문·숫자·. - _)" autocomplete="off" spellcheck="false" hidden>
+    <p id="model-hint" class="small muted"></p>
+  </div>
+
   <!-- 분류해 보기 ─────────────────────────────── -->
   <section id="tab-try" class="panel">
     <label for="input" class="label">고객 문의</label>
@@ -63,7 +71,7 @@
     <p id="score-msg" class="note" hidden></p>
 
     <table id="score-table" class="score" hidden>
-      <thead><tr><th></th><th>규칙</th><th>AI</th></tr></thead>
+      <thead><tr><th></th><th>규칙</th><th id="score-ai-head">AI</th></tr></thead>
       <tbody>
         <tr><th>분류</th><td data-k="rule-category">—</td><td data-k="ai-category">—</td></tr>
         <tr><th>감정</th><td data-k="rule-sentiment">—</td><td data-k="ai-sentiment">—</td></tr>

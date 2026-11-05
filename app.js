@@ -6,7 +6,55 @@
 (function () {
   "use strict";
   const $ = s => document.querySelector(s);
-  const S = { criteria: null, test: [], practice: [], aiResults: null };
+  const S = { criteria: null, test: [], practice: [], aiResults: null, model: "", serverDefault: "" };
+
+  // ── 모델 고르기 ─────────────────────────────────────
+  // 무료로 쓸 수 있다고 공식 가격표(aistudio.google.com/docs/pricing)에 적힌 글쓰기 모델.
+  // 무료 한도 숫자는 AI Studio 에 로그인해야 보이고 자주 바뀐다 — 순서는 «Flash-Lite 가 대체로 넉넉하다»는 짐작이다.
+  const MODELS = [
+    { id: "gemini-3.5-flash-lite", note: "가벼움 · 한도 넉넉한 편(추정)" },
+    { id: "gemini-3.1-flash-lite", note: "가벼움 · 한도 넉넉한 편(추정)" },
+    { id: "gemini-3.6-flash",      note: "중간" },
+    { id: "gemini-3.8-flash",      note: "가장 새 Flash" },
+    { id: "gemini-3-flash-preview", note: "프리뷰 · 한도가 더 빡빡할 수 있음" },
+  ];
+  const CUSTOM = "__custom__";
+  const KEY = "classifier.model";
+
+  function saveModel() { try { localStorage.setItem(KEY, S.model); } catch (e) { /* 저장 못 해도 동작한다 */ } }
+  function loadModel() { try { return localStorage.getItem(KEY) || ""; } catch (e) { return ""; } }
+
+  function renderModelHint() {
+    $("#model-hint").textContent = S.model
+      ? `이 모델로 호출합니다: ${S.model}`
+      : `서버 기본값을 씁니다${S.serverDefault ? ": " + S.serverDefault : ""} (Vercel 환경 변수 GEMINI_MODEL)`;
+  }
+
+  function initModelPicker() {
+    const sel = $("#model-sel"), custom = $("#model-custom");
+    sel.innerHTML = `<option value="">서버 기본값</option>`
+      + MODELS.map(m => `<option value="${m.id}">${m.id} — ${m.note}</option>`).join("")
+      + `<option value="${CUSTOM}">직접 입력…</option>`;
+    const saved = loadModel();
+    S.model = saved;
+    if (!saved) sel.value = "";
+    else if (MODELS.some(m => m.id === saved)) sel.value = saved;
+    else { sel.value = CUSTOM; custom.value = saved; custom.hidden = false; }
+
+    sel.addEventListener("change", () => {
+      custom.hidden = sel.value !== CUSTOM;
+      S.model = sel.value === CUSTOM ? custom.value.trim() : sel.value;
+      if (sel.value === CUSTOM) custom.focus();
+      saveModel(); renderModelHint();
+    });
+    custom.addEventListener("input", () => { S.model = custom.value.trim(); saveModel(); renderModelHint(); });
+    renderModelHint();
+
+    // 서버가 쓰는 기본 모델 이름을 물어 안내에 보여 준다. 로컬(서버 함수 없음)에서는 조용히 넘어간다.
+    fetch("api/classify").then(r => r.ok ? r.json() : null).then(d => {
+      if (d && d.default) { S.serverDefault = d.default; renderModelHint(); }
+    }).catch(() => {});
+  }
 
   async function load() {
     const [c, t, p] = await Promise.all([
@@ -30,7 +78,7 @@
       const r = await fetch("api/classify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ texts: maskedTexts, criteria: S.criteria }),
+        body: JSON.stringify({ texts: maskedTexts, criteria: S.criteria, model: S.model }),
       });
       if (!r.ok) return { results: null, reason: `서버 함수가 없습니다 (${r.status}) — 배포하면 생깁니다` };
       return await r.json();
@@ -116,9 +164,11 @@
     btn.disabled = true;
     const masked = S.test.map(r => Mask.mask(r.text).masked);
     const results = [];
+    let usedModel = "";
     for (let i = 0; i < masked.length; i += 20) {
       btn.textContent = `AI 채점 중… ${i}/${masked.length}`;
       const r = await askAI(masked.slice(i, i + 20));
+      usedModel = r.model || usedModel;
       if (!r.results) {
         $("#score-msg").hidden = false;
         $("#score-msg").textContent = `AI로 채점하지 못했습니다 — ${r.reason}`;
@@ -132,6 +182,7 @@
     S.aiResults = results;
     const s = Rules.score(S.test, (r, i) => results[i] || miss);
     showScore("ai", s);
+    $("#score-ai-head").textContent = usedModel ? "AI · " + usedModel : "AI";
     const blank = results.filter(x => !x).length;
     $("#score-msg").hidden = !blank;
     if (blank) $("#score-msg").textContent = `AI가 답하지 않은 문장 ${blank}건은 오답으로 셌습니다.`;
@@ -158,6 +209,7 @@
     $("#crit-urg").textContent = c.urgency.guide;
   }
 
+  initModelPicker();
   load();
 })();
 
